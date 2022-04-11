@@ -1,41 +1,102 @@
+const bcrypt = require('bcryptjs');
 const {response} = require('express');
-const {validationResult} = require('express-validator');
+const {generarJWT} = require('../helpers/jwt');
+const Usuario = require('../models/Usuario');
 
-const crearUsuario = (req, res = response) => {
+const crearUsuario = async (req, res = response) => {
 	const {name, email, password} = req.body;
 
-	const err = validationResult(req);
+	try {
+		let usuario = await Usuario.findOne({email});
 
-	if (!err.isEmpty()) {
-		return res.status(400).json({
+		if (usuario) {
+			return res.status(400).json({
+				ok: false,
+				msg: 'El correo ingresado ya esta asociado a una cuenta existente',
+			});
+		}
+
+		usuario = new Usuario(req.body);
+
+		//Encriptar contraseña
+		const salt = bcrypt.genSaltSync();
+		usuario.password = bcrypt.hashSync(password, salt);
+
+		await usuario.save();
+
+		//Generar JWT
+		const token = await generarJWT(usuario.id, usuario.name);
+
+		res.status(201).json({
+			ok: true,
+			msg: 'Usuario registrado con exito',
+			uid: usuario.id,
+			name: usuario.name,
+			token,
+		});
+	} catch (error) {
+		console.log(error);
+		res.status(500).json({
 			ok: false,
-			errors: err.mapped(),
+			msg: 'Por favor pongase en contacto con el administrador del sitio',
 		});
 	}
-
-	res.status(201).json({
-		ok: true,
-		msg: 'Registro',
-		name,
-		email,
-		password,
-	});
 };
 
-const logInUsuario = (req, res = response) => {
+const logInUsuario = async (req, res = response) => {
 	const {email, password} = req.body;
-	res.json({
-		ok: true,
-		msg: 'Login',
-		email,
-		password,
-	});
+
+	try {
+		const usuario = await Usuario.findOne({email});
+
+		if (!usuario) {
+			return res.status(400).json({
+				ok: false,
+				msg: 'No hay ninguna cuenta asociada a este correo',
+			});
+		}
+		//Validar ´password encriptada
+		const validPassword = bcrypt.compareSync(password, usuario.password);
+
+		if (!validPassword) {
+			return res.status(400).json({
+				ok: false,
+				msg: 'Password incorrecto',
+			});
+		}
+
+		//Generar JWT
+		const token = await generarJWT(usuario.id, usuario.name);
+
+		res.status(201).json({
+			ok: true,
+			msg: 'Ingreso con exito',
+			uid: usuario.id,
+			name: usuario.name,
+			token,
+		});
+	} catch (error) {
+		console.log(error);
+		res.status(500).json({
+			ok: false,
+			msg: 'Por favor pongase en contacto con el administrador del sitio',
+		});
+	}
 };
 
-const revalidarToken = (req, res = response) => {
+const revalidarToken = async (req, res = response) => {
+	const uid = req.uid;
+	const name = req.name;
+
+	//Crear JWT ya validado
+	const token = await generarJWT(uid, name);
+
 	res.json({
 		ok: true,
-		msg: 'renew',
+		msg: 'Token Renovado',
+		uid,
+		name,
+		token,
 	});
 };
 
