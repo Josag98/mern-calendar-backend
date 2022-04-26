@@ -5,6 +5,8 @@ require('dotenv').config();
 //Crear el servidor de express
 const app = express();
 
+app.use(cors());
+
 //Conexion a la base de datos
 dbConnection();
 
